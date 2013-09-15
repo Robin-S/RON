@@ -10,6 +10,7 @@
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 /** RON - Robin's Object Notation
  *
  * This module is similar to JSON, but preserving
@@ -40,7 +41,7 @@ var RON = new (function RON() {})();
                 default:  return !isNaN(str[i]) ? parse_number() : parse_null();
             }
         }
-        P(this, parse);
+        this.parse = parse;
 
         function parse_arr(j)
         {
@@ -64,8 +65,7 @@ var RON = new (function RON() {})();
         }
         function parse_number()
         {
-            var match = str.substr(i).match(/^\d+(?:\.\d+)?/);
-            var nr_str = match[0]
+            var nr_str = str.substr(i).match(/^\d+(?:\.\d+)?/)[0];
             i += nr_str.length;
             return parseFloat(nr_str);
         }
@@ -95,8 +95,7 @@ var RON = new (function RON() {})();
      */
     function Encoder()
     {
-        var map = M(), refs = [];
-        var N = 0;
+        var map = new Map(), refs = [];
 
         function encode(obj)
         {
@@ -114,8 +113,6 @@ var RON = new (function RON() {})();
                     return ['"' + obj.replace(/"/g, "\\\"") + '"'];
             }
         }
-        P(this, encode);
-
         function encode_obj(obj)
         {
             var s = ['{'], i = 0;
@@ -146,18 +143,9 @@ var RON = new (function RON() {})();
 
             return s;
         }
-        /**
-         * {{{ Method: register 
-         * @return: RepresentationArray
-         */
         function register(obj)
         {
             var i, r;
-
-            /*
-            if (N++ < 50)
-                console.log("register", obj, map.containsKey(obj));
-            */
 
             if (map.containsKey(obj))
             {
@@ -171,21 +159,57 @@ var RON = new (function RON() {})();
                 }
 
                 r.representations.push(['*' + i]);
-                //console.log("Added reference", r);
             }
             else
             {
                 r = new RepresentationArray();
                 map.put(obj, r);
                 var s = encode(obj);
-                //console.log(s);
                 r.representations[0] = r.representations[0].concat(s);
-                //console.log(map.getContent());
             }
 
             return r;
-        } //}}}
-        P(this, register);
+        }
+        this.register = register;
+    } //}}}
+    /* {{{ Class: Map 
+     */
+    function Map() {
+
+        var keys   = [],
+            values = [],
+            i$, k$;
+
+        function getIndex(k)
+        {
+            if (k$ !== undefined && k$ === k)
+                return i$;
+            
+            return i$ = indexOf(keys, k$ = k);
+        }
+
+        function containsKey(k)
+        {
+            return -1 < getIndex(k);
+        }
+        function get(k)
+        {
+            return containsKey(k) ? values[i$] : undefined;
+        }
+        function put(k, v)
+        {
+            if (containsKey(k))
+                values[i$] = v;
+            else
+            {
+                i$ = keys.length;
+                keys.push(k$ = k);
+                values.push(v);
+            }
+        }
+        this.containsKey = containsKey;
+        this.get = get;
+        this.put = put;
     } //}}}
     /* {{{ Class: RepresentationArray 
      */
@@ -199,6 +223,19 @@ var RON = new (function RON() {})();
         };
     } //}}}
 
+    /* {{{ Method: indexOf 
+     */
+    function indexOf(array, el)
+    {
+        if (array.indexOf)
+            return array.indexOf(el);
+
+        var i = 0;
+        while (i < array.length && array[i] !== el)
+            i++;
+
+        return i < array.length ? i : -1;
+    } //}}}
     /* {{{ Method: parse 
      */
     function parse(str)
@@ -210,8 +247,8 @@ var RON = new (function RON() {})();
     function stringify(obj)
     {
         return (new Encoder()).register(obj).toString();
-        //return (new Encoder()).encode(obj).join("");
     } //}}}
-    P(this, parse, stringify);
+    this.parse = parse;
+    this.stringify = stringify;
 
 }).call(RON); //}}}
