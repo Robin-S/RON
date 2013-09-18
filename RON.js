@@ -22,39 +22,64 @@ var RON = new (function RON() {})();
 
 (function Setup_RON()
 {
+    function I(x)
+    {
+        return x;
+    }
     /* {{{ Class: Decoder 
      */
     function Decoder(str)
     {
-        var i = 0;
-        var refs = [];
+        var i    = 0,
+            refs = [];
+            var X = [];
 
-        function parse(j)
+        function parse(reviver)
+        {
+            var obj = parse_val();
+
+            console.log(X);
+
+            if (!reviver)
+                return obj;
+
+            for (i = 0; i < X.length; i++)
+                X[i][0][k = X[i][1]] = reviver(k, X[i][2]);
+
+            return reviver("", obj);
+        }
+        function parse_val(j)
         {
             switch (str[i])
             {
                 case '{': return parse_obj(j);
                 case '[': return parse_arr(j);
-                case '&': return refs[i++, j = parse_number()] = (i++, parse(j));
-                case '*': return refs[i++, parse_number()];
-                case '"': return parse_str(j);
+                case '"': return parse_str();
+                case '&': return refs[i++, j = parse_number()] = (i++, parse_val(j))
+                case '*': return refs[i++, j = parse_number()];
                 default:  return !isNaN(str[i]) ? parse_number() : parse_null();
             }
         }
-        this.parse = parse;
-
         function parse_arr(j)
         {
-            var arr = [];
+            var arr = [],
+                k   = 0;
+            var v;
 
             if (j !== undefined)
                 refs[j] = arr;
 
             if (str[++i] != ']')
-                arr.push(parse());
+            {
+                arr.push(v = parse_val());
+                X.push([arr, k++, v]);
+            }
 
             while (str[i++] == ',')
-                arr.push(parse());
+            {
+                arr.push(v = parse_val());
+                X.push([arr, k++, v]);
+            }
 
             return arr;
         }
@@ -69,18 +94,31 @@ var RON = new (function RON() {})();
             i += nr_str.length;
             return parseFloat(nr_str);
         }
+        function xparse(parent, j)
+        {
+            return parse_val();
+        }
         function parse_obj(j)
         {
-            var obj = {};
+            var obj = {}, k;
+            var v;
+
+            //console.log(j, str.substr(i));
 
             if (j !== undefined)
                 refs[j] = obj;
 
             if (str[++i] != '}')
-                obj[parse_str()] = (i++, parse());
+            {
+                obj[k = parse_str()] = (i++, v = xparse(obj));
+                X.push([obj, k, v]);
+            }
 
             while (str[i++] == ',')
-                obj[parse_str()] = (i++, parse());
+            {
+                obj[k = parse_str()] = (i++, v = xparse(obj));
+                X.push([obj, k, v]);
+            }
 
             return obj;
         }
@@ -90,7 +128,9 @@ var RON = new (function RON() {})();
             i += match[0].length;
             return JSON.parse(match[0]);
         }
-    } //}}}
+        this.parse = parse;
+    }
+    // }}}
     /* {{{ Class: Encoder 
      */
     function Encoder()
@@ -109,6 +149,9 @@ var RON = new (function RON() {})();
                     else
                         return encode_obj(obj);
 
+                case "number":
+                    return [JSON.stringify(obj)];
+
                 case "string":
                     return ['"' + obj.replace(/"/g, "\\\"") + '"'];
             }
@@ -119,10 +162,13 @@ var RON = new (function RON() {})();
 
             for (var k in obj)
             {
-                if (0 < i++)
-                    s.push(',');
-                
-                s.push(encode(k), ':', register(obj[k]));
+                if (typeof obj[k] != "function")
+                {
+                    if (0 < i++)
+                        s.push(',');
+                    
+                    s.push(encode(k), ':', register(obj[k]));
+                }
             }
 
             s.push('}');
@@ -131,13 +177,21 @@ var RON = new (function RON() {})();
         }
         function encode_arr(obj)
         {
-            var s = ['['];
+            var s = ['['],
+                i = 0;
 
-            if (obj.length)
-                s.push(register(obj[0]));
+            while (i < obj.length && typeof obj[i] == "function")
+                i++;
 
-            for (var i = 1; i < obj.length; i++)
-                s.push(',', register(obj[i]));
+            if (i < obj.length)
+                s.push(register(obj[i++]));
+
+            while (i < obj.length)
+            {
+                if (typeof obj[i] != "function")
+                    s.push(',', register(obj[i]));
+                i++;
+            }
 
             s.push(']');
 
@@ -146,6 +200,9 @@ var RON = new (function RON() {})();
         function register(obj)
         {
             var i, r;
+
+            if (typeof obj == "object" && obj && "toJSON" in obj && typeof obj.toJSON  == "function")
+                obj = obj.toJSON();
 
             if (map.containsKey(obj))
             {
@@ -223,6 +280,13 @@ var RON = new (function RON() {})();
         };
     } //}}}
 
+    /* {{{ Method: idReviver
+     */
+    function idReviver(k, v)
+    {
+        return v;
+    }
+    // }}}
     /* {{{ Method: indexOf 
      */
     function indexOf(array, el)
@@ -235,20 +299,24 @@ var RON = new (function RON() {})();
             i++;
 
         return i < array.length ? i : -1;
-    } //}}}
+    }
+    // }}}
     /* {{{ Method: parse 
      */
-    function parse(str)
+    function parse(str, reviver)
     {
-        return (new Decoder(str)).parse();
-    } //}}}
+        return (new Decoder(str)).parse(reviver);
+    }
+    // }}}
     /* {{{ Method: stringify 
      */
     function stringify(obj)
     {
         return (new Encoder()).register(obj).toString();
-    } //}}}
+    }
+    // }}}
     this.parse = parse;
     this.stringify = stringify;
 
-}).call(RON); //}}}
+}).call(RON);
+// }}}

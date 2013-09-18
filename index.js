@@ -52,6 +52,50 @@ function main()
 
     var rObj2 = RON.parse(rStr2);
     console.log(rObj2, rObj2.parent[0] == rObj2);
+
+    function Element()
+    {
+        this.children = [];
+
+        this.appendChild = function(el) //Introduce some nasty, but common reference cycles
+        {
+            el.parent = this;
+
+            if (this.children.length)
+            {
+                el.previousSibling = last(this.children);
+                last(this.children).nextSibling = el;
+            }
+
+            this.children.push(el);
+        }
+    }
+
+    var p = new Element();
+    p.appendChild(new Element());
+    p.appendChild(new Element());
+
+    console.log(RON.stringify(p));
+
+    var Y;
+    function reviver(k, v)
+    {
+        console.log(k, "::" , v);
+        if (!Y && typeof v == "object")
+            Y = v;
+        return Y || v;
+    }
+
+    //function 
+
+    var X = { x: "Some IMPORTANT value" };
+    X.data = X;
+
+    var xStr = (RON.stringify(X));
+    console.log(xStr);
+
+    var xObj = RON.parse(xStr, reviver);
+    console.log(xObj);
 }
 
 addEvent(window, "DOMContentLoaded", main, false);
