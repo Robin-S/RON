@@ -22,112 +22,233 @@ var RON = new (function RON() {})();
 
 (function Setup_RON()
 {
-    function I(x)
-    {
-        return x;
-    }
     /* {{{ Class: Decoder 
      */
-    function Decoder(str)
+    function Decoder(str, reviver)
     {
-        var i    = 0,
-            refs = [];
-            var X = [];
+        var i      = 0,
+            refs   = [];
+        var X      = [],
+            X$ = [];
+        var Memory = [];
 
-        function parse(reviver)
+        /* {{{ Class: E 
+         */
+        function E(m)
+        {
+            this.m = m;
+
+            function equals(e)
+            {
+                return m == e.m;
+            }
+            this.equals = equals;
+        }
+        // }}}
+        /* {{{ Method: findInMemory 
+         */
+        function findInMemory(obj)
+        {
+            var Y = [obj];
+            f(obj);
+
+            function f(obj)
+            {
+                if (typeof obj == "object" && obj)
+                {
+                    for (var k in obj)
+                    {
+                        var v = obj[k];
+                        var i = indexOf(Memory, v);
+
+                        if (-1 < i)
+                            X$.push([obj, k, v]);
+                        else if (-1 == indexOf(Y, v))
+                        {
+                            Y.push(v);
+                            f(v);
+                        }
+                    }
+                }
+            }
+        }
+        // }}}
+        /* {{{ Method: revive 
+         */
+        function revive(target, key, e)
+        {
+            var value  = valueOf(e);
+            var value$ = reviver(key, value);
+
+            if (key in target)
+                target[key] = value$;
+
+            if (e instanceof E && value$ != value)
+            {
+                findInMemory(value$);
+
+                for (var i = X$.length - 1; i >= 0; i--)
+                {
+                    if (X$[i][2] == value)
+                    {
+                        X$[i][0][X$[i][1]] = value$;
+                        X$.shift();
+                    }
+                }
+            }
+
+            return value$;
+        }
+        // }}}
+        /* {{{ Method: valueOf 
+         */
+        function valueOf(e)
+        {
+            return e instanceof E ? valueOf(Memory[e.m]) : e;
+        }
+        // }}}
+
+        /* {{{ Method: parse 
+         */
+        function parse()
         {
             var obj = parse_val();
 
-            console.log(X);
-
-            if (!reviver)
+            if (typeof obj != "object" || obj == null)
                 return obj;
 
-            for (i = 0; i < X.length; i++)
-                X[i][0][k = X[i][1]] = reviver(k, X[i][2]);
+            /*
+            console.log(Memory);
+            console.log(S(X)); //*/
 
-            return reviver("", obj);
+            if (!reviver)
+                return Memory[0];
+
+            X.push([{}, "", obj]);
+
+            while (X.length)
+            {
+                var x = X.shift();
+                var y = revive.apply(this, x);
+                //console.log(valueOf(y));
+                //console.log(" ");
+            }
+
+            return y;
         }
+        // }}}
+        /* {{{ Method: parse_val 
+         */
         function parse_val(j)
         {
             switch (str[i])
             {
+                case 'f':
+                case 't': return parse_bool();
+                case 'n': return parse_null();
+                case '"': return parse_str();
+
                 case '{': return parse_obj(j);
                 case '[': return parse_arr(j);
-                case '"': return parse_str();
+
                 case '&': return refs[i++, j = parse_number()] = (i++, parse_val(j))
                 case '*': return refs[i++, j = parse_number()];
-                default:  return !isNaN(str[i]) ? parse_number() : parse_null();
+
+                case '-': 
+                default:  return parse_number();
             }
         }
+        // }}}
+        /* {{{ Method: parse_arr 
+         */
         function parse_arr(j)
         {
             var arr = [],
-                k   = 0;
-            var v;
+                k   = 0, v,
+                m   = Memory.push(arr) - 1,
+                e   = new E(m);
 
             if (j !== undefined)
-                refs[j] = arr;
+                refs[j] = e;
 
             if (str[++i] != ']')
             {
-                arr.push(v = parse_val());
+                arr.push(valueOf(v = parse_val()));
                 X.push([arr, k++, v]);
             }
 
             while (str[i++] == ',')
             {
-                arr.push(v = parse_val());
+                arr.push(valueOf(v = parse_val()));
                 X.push([arr, k++, v]);
             }
 
-            return arr;
+            return e;
         }
+        // }}}
+        /* {{{ Method: parse_bool 
+         */
+        function parse_bool()
+        {
+            if (str.substr(i, 5) == "false")
+                return i += 5, false;
+            else if (str.substr(i, 4) == "true")
+                return i += 4, true;
+        }
+        // }}}
+        /* {{{ Method: parse_null 
+         */
         function parse_null()
         {
-            i += 4;
-            return null;
+            if (str.substr(i, 4) == "null")
+                return i += 4, null;
         }
+        // }}}
+        /* {{{ Method: parse_number 
+         */
         function parse_number()
         {
-            var nr_str = str.substr(i).match(/^\d+(?:\.\d+)?/)[0];
+            var nr_str = str.substr(i).match(/^\-?\d+(?:\.\d+)?/)[0];
             i += nr_str.length;
             return parseFloat(nr_str);
         }
-        function xparse(parent, j)
-        {
-            return parse_val();
-        }
+        // }}}
+        /* {{{ Method: parse_obj 
+         */
         function parse_obj(j)
         {
-            var obj = {}, k;
-            var v;
-
-            //console.log(j, str.substr(i));
+            var obj = {}, k, v,
+                m   = Memory.push(obj) - 1,
+                e   = new E(m);
 
             if (j !== undefined)
-                refs[j] = obj;
+                refs[j] = e;
 
             if (str[++i] != '}')
             {
-                obj[k = parse_str()] = (i++, v = xparse(obj));
+                obj[k = parse_str()] = (i++, valueOf(v = parse_val()));
                 X.push([obj, k, v]);
             }
 
             while (str[i++] == ',')
             {
-                obj[k = parse_str()] = (i++, v = xparse(obj));
+                obj[k = parse_str()] = (i++, valueOf(v = parse_val()));
                 X.push([obj, k, v]);
             }
 
-            return obj;
+            return e;
         }
+        // }}}
+        /* {{{ Method: parse_str 
+         */
         function parse_str()
         {
             var match = str.substr(i).match(/"(\\.|[^"])*"/);
             i += match[0].length;
             return JSON.parse(match[0]);
         }
+        // }}}
+
         this.parse = parse;
     }
     // }}}
@@ -149,11 +270,13 @@ var RON = new (function RON() {})();
                     else
                         return encode_obj(obj);
 
+                case "boolean":
                 case "number":
+                case "string":
                     return [JSON.stringify(obj)];
 
-                case "string":
-                    return ['"' + obj.replace(/"/g, "\\\"") + '"'];
+                default:
+                    return ["null"];
             }
         }
         function encode_obj(obj)
@@ -217,13 +340,15 @@ var RON = new (function RON() {})();
 
                 r.representations.push(['*' + i]);
             }
-            else
+            else if (obj && typeof obj == "object")
             {
                 r = new RepresentationArray();
                 map.put(obj, r);
                 var s = encode(obj);
                 r.representations[0] = r.representations[0].concat(s);
             }
+            else
+                r = encode(obj);
 
             return r;
         }
@@ -280,13 +405,6 @@ var RON = new (function RON() {})();
         };
     } //}}}
 
-    /* {{{ Method: idReviver
-     */
-    function idReviver(k, v)
-    {
-        return v;
-    }
-    // }}}
     /* {{{ Method: indexOf 
      */
     function indexOf(array, el)
@@ -305,7 +423,7 @@ var RON = new (function RON() {})();
      */
     function parse(str, reviver)
     {
-        return (new Decoder(str)).parse(reviver);
+        return (new Decoder(str, reviver)).parse();
     }
     // }}}
     /* {{{ Method: stringify 
@@ -315,7 +433,7 @@ var RON = new (function RON() {})();
         return (new Encoder()).register(obj).toString();
     }
     // }}}
-    this.parse = parse;
+    this.parse     = parse;
     this.stringify = stringify;
 
 }).call(RON);
